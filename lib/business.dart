@@ -259,58 +259,164 @@ Future<void> _selectDate(BuildContext context) async {
   }
 }
 
-  Future<void> _selectTime(BuildContext context) async {
-    if (_selectedBarberId == null) return _showSnackBar('Selecciona un barbero');
-    if (_selectedDate == null) return _showSnackBar('Selecciona una fecha');
-    if (_selectedServices.isEmpty) return _showSnackBar('Agrega al menos un servicio');
+Future<void> _selectTime(BuildContext context) async {
+  if (_selectedBarberId == null) return _showSnackBar('Selecciona un barbero');
+  if (_selectedDate == null) return _showSnackBar('Selecciona una fecha');
+  if (_selectedServices.isEmpty) return _showSnackBar('Agrega al menos un servicio');
 
-    try {
-      final businessService = Provider.of<BusinessService>(context, listen: false);
-      
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const Center(child: CircularProgressIndicator()),
-      );
+  try {
+    final businessService = Provider.of<BusinessService>(context, listen: false);
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
 
-      final availableSlots = await businessService.getAvailableTimeSlots(
-        _selectedBarberId!,
-        _selectedDate!,
-        _totalDuration,
-      );
+    final availableSlots = await businessService.getAvailableTimeSlots(
+      _selectedBarberId!,
+      _selectedDate!,
+      _totalDuration,
+    );
 
-      Navigator.of(context).pop();
+    Navigator.of(context).pop();
 
-      if (availableSlots.isEmpty) {
-        return _showSnackBar('No hay horarios disponibles');
-      }
-
-      final TimeOfDay? pickedTime = await showTimePicker(
-        context: context,
-        initialTime: _selectedTime ?? _findClosestAvailableTime(
-          availableSlots.map((slot) => TimeOfDay(
-            hour: slot['hour'], 
-            minute: slot['minute'],
-          )).toList(),
-        ),
-        builder: (context, child) => _buildPickerTheme(child!),
-      );
-
-      if (pickedTime != null) {
-        final isTimeValid = availableSlots.any((slot) => 
-          slot['hour'] == pickedTime.hour && slot['minute'] == pickedTime.minute);
-        
-        if (isTimeValid) {
-          setState(() => _selectedTime = pickedTime);
-        } else {
-          _showSnackBar('Selecciona una hora disponible');
-        }
-      }
-    } catch (e) {
-      Navigator.of(context).pop();
-      _showSnackBar('Error al obtener horarios: ${e.toString()}');
+    if (availableSlots.isEmpty) {
+      return _showSnackBar('No hay horarios disponibles');
     }
+
+    // Convertir los slots disponibles a TimeOfDay para fácil comparación
+    final availableTimes = availableSlots.map((slot) => TimeOfDay(
+      hour: slot['hour'], 
+      minute: slot['minute'],
+    )).toList();
+
+    // Mostrar el nuevo selector de hora en cuadrícula
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'Selecciona una hora',
+          style: GoogleFonts.poppins(
+            color: const Color(0xFF254155),
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: _buildTimeGrid(availableTimes),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(
+              'Cancelar',
+              style: GoogleFonts.poppins(color: const Color(0xFF143E40)),
+            ),
+          ),
+        ],
+      ),
+    );
+  } catch (e) {
+    Navigator.of(context).pop();
+    _showSnackBar('Error al obtener horarios: ${e.toString()}');
   }
+}
+
+// Nuevo método para construir la cuadrícula de horas
+Widget _buildTimeGrid(List<TimeOfDay> availableTimes) {
+  // Generar los intervalos de tiempo desde las 9:00 hasta las 14:00 en intervalos de 15 minutos
+  final startTime = TimeOfDay(hour: 9, minute: 0);
+  final endTime = TimeOfDay(hour: 20, minute: 30);
+  final timeSlots = <TimeOfDay>[];
+  
+  TimeOfDay currentTime = startTime;
+  while (currentTime.hour < endTime.hour || 
+        (currentTime.hour == endTime.hour && currentTime.minute <= endTime.minute)) {
+    timeSlots.add(currentTime);
+    
+    // Añadir 15 minutos
+    int newMinute = currentTime.minute + 30;
+    int newHour = currentTime.hour;
+    if (newMinute >= 60) {
+      newHour++;
+      newMinute -= 60;
+    }
+    currentTime = TimeOfDay(hour: newHour, minute: newMinute);
+  }
+
+  // Organizar en filas de 4 columnas como en tu imagen
+  final rows = <List<TimeOfDay>>[];
+  for (int i = 0; i < timeSlots.length; i += 3) {
+    final end = i + 3;
+    rows.add(timeSlots.sublist(i, end > timeSlots.length ? timeSlots.length : end));
+  }
+
+  return Column(
+    mainAxisSize: MainAxisSize.min,
+    children: rows.map((row) => _buildTimeRow(row, availableTimes)).toList(),
+  );
+}
+
+// Método para construir una fila de la cuadrícula de horas
+Widget _buildTimeRow(List<TimeOfDay> times, List<TimeOfDay> availableTimes) {
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 4),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: times.map((time) => _buildTimeSlot(time, availableTimes)).toList(),
+    ),
+  );
+}
+
+// Método para construir un slot de hora individual
+Widget _buildTimeSlot(TimeOfDay time, List<TimeOfDay> availableTimes) {
+  final isAvailable = availableTimes.any((t) => t.hour == time.hour && t.minute == time.minute);
+  final isSelected = _selectedTime != null && 
+                     _selectedTime!.hour == time.hour && 
+                     _selectedTime!.minute == time.minute;
+
+  return GestureDetector(
+    onTap: isAvailable ? () {
+      setState(() {
+        _selectedTime = time;
+      });
+      Navigator.of(context).pop();
+    } : null,
+    child: Container(
+      width: 70,
+      height: 40,
+      decoration: BoxDecoration(
+        color: isSelected 
+            ? const Color(0xFF254155)
+            : isAvailable 
+                ? _getAvailabilityColor(time)
+                : Colors.grey.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isSelected 
+              ? const Color(0xFF254155)
+              : Colors.grey.withOpacity(0.3),
+        ),
+      ),
+      child: Center(
+        child: Text(
+          '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}',
+          style: GoogleFonts.poppins(
+            color: isAvailable 
+                ? isSelected 
+                    ? Colors.white 
+                    : const Color(0xFF254155)
+                : Colors.grey,
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      ),
+    ),
+  );
+}
 
   void _toggleServiceSelection(Map<String, dynamic> service) {
     setState(() {
@@ -325,6 +431,23 @@ Future<void> _selectDate(BuildContext context) async {
       }
       _selectedTime = null;
     });
+  }
+
+  // Returns a color based on the demand level for the given time slot, if available.
+  Color _getAvailabilityColor(TimeOfDay time) {
+    if (_selectedDate == null) return Colors.green;
+    final dateKey = DateTime(_selectedDate!.year, _selectedDate!.month, _selectedDate!.day);
+    final demandLevel = _availabilityMap[dateKey];
+    switch (demandLevel) {
+      case 'low':
+        return Colors.green.withOpacity(0.2);
+      case 'medium':
+        return Colors.orange.withOpacity(0.2);
+      case 'high':
+        return Colors.red.withOpacity(0.2);
+      default:
+        return Colors.green.withOpacity(0.2);
+    }
   }
 
 Future<void> _confirmOrder() async {
@@ -470,7 +593,7 @@ Future<void> _confirmOrder() async {
     );
   }
 
-  @override
+   @override
   Widget build(BuildContext context) {
     super.build(context);
     return Scaffold(
@@ -672,54 +795,54 @@ Future<void> _confirmOrder() async {
     );
   }
 
-Widget _buildBusinessHeader(Map<String, dynamic> business) {
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(
-        business['name'] ?? 'Sin nombre',
-        style: GoogleFonts.poppins(
-          fontSize: 22,
-          fontWeight: FontWeight.bold,
-          color: const Color(0xFF254155),
+  Widget _buildBusinessHeader(Map<String, dynamic> business) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          business['name'] ?? 'Sin nombre',
+          style: GoogleFonts.poppins(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            color: const Color(0xFF254155),
+          ),
         ),
-      ),
-      const SizedBox(height: 8),
-      Row(
-        children: [
-          const Icon(Icons.location_on, size: 16, color: Colors.grey),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Text(
-              business['address'] ?? 'Sin dirección',
-              style: GoogleFonts.poppins(
-                color: Colors.grey[600],
-                fontSize: 14,
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            const Icon(Icons.location_on, size: 16, color: Colors.grey),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                business['address'] ?? 'Sin dirección',
+                style: GoogleFonts.poppins(
+                  color: Colors.grey[600],
+                  fontSize: 14,
+                ),
               ),
             ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: const Color(0xFF143E40).withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              'ABIERTO',
-              style: GoogleFonts.poppins(
-                color: const Color(0xFF254155),
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFF143E40).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                'ABIERTO',
+                style: GoogleFonts.poppins(
+                  color: const Color(0xFF254155),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
               ),
             ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 16),
-      Divider(color: Colors.grey[300]),
-    ],
-  );
-}
+          ],
+        ),
+        const SizedBox(height: 16),
+        Divider(color: Colors.grey[300]),
+      ],
+    );
+  }
 
   Widget _buildReservationForm() {
     return Column(
@@ -841,47 +964,47 @@ Widget _buildBusinessHeader(Map<String, dynamic> business) {
     );
   }
 
-Widget _buildBarberDropdown(List<Map<String, dynamic>> barbers) {
-  return CompositedTransformTarget(
-    link: _barberDropdownLink,
-    child: Container(
-      key: _barberDropdownKey,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[300]!),
-      ),
-      child: InkWell(
-        onTap: () => _toggleBarberDropdown(barbers),
-        child: Row(
-          children: [
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Text(
-                  _selectedBarberId != null
-                      ? barbers.firstWhere(
-                          (b) => b['id'] == _selectedBarberId,
-                          orElse: () => {'name': 'Seleccionar barbero'},
-                        )['name']?.toString() ?? 'Seleccionar barbero'
-                      : 'Seleccionar barbero',
-                  style: GoogleFonts.poppins(
-                    color: _selectedBarberId != null ? Colors.black : Colors.grey[600],
+  Widget _buildBarberDropdown(List<Map<String, dynamic>> barbers) {
+    return CompositedTransformTarget(
+      link: _barberDropdownLink,
+      child: Container(
+        key: _barberDropdownKey,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey[300]!),
+        ),
+        child: InkWell(
+          onTap: () => _toggleBarberDropdown(barbers),
+          child: Row(
+            children: [
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: Text(
+                    _selectedBarberId != null
+                        ? barbers.firstWhere(
+                            (b) => b['id'] == _selectedBarberId,
+                            orElse: () => {'name': 'Seleccionar barbero'},
+                          )['name']?.toString() ?? 'Seleccionar barbero'
+                        : 'Seleccionar barbero',
+                    style: GoogleFonts.poppins(
+                      color: _selectedBarberId != null ? Colors.black : Colors.grey[600],
+                    ),
                   ),
                 ),
               ),
-            ),
-            Icon(
-              _isBarberDropdownOpen ? Icons.arrow_drop_up : Icons.arrow_drop_down,
-              color: Colors.grey,
-            ),
-          ],
+              Icon(
+                _isBarberDropdownOpen ? Icons.arrow_drop_up : Icons.arrow_drop_down,
+                color: Colors.grey,
+              ),
+            ],
+          ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   Widget _buildDateSelector() {
     return InkWell(
