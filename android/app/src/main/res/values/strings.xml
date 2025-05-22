@@ -1,0 +1,4 @@
+<resources>
+    <!-- Define your Google App ID from google-services.json -->
+    <string name="google_app_id">your-google-app-id</string> <!-- Sustituye con tu ID de la aplicación de Firebase -->
+</resources>

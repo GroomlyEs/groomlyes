@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "651284308896",
+    "project_id": "groomly-4b1a1",
+    "storage_bucket": "groomly-4b1a1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:651284308896:android:4c82d17c273d275d83bac5",
+        "android_client_info": {
+          "package_name": "com.company.groomly"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDReD8HgMdVveGGdO1Q56EscbTBCocHptE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
